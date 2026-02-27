@@ -1,7 +1,7 @@
 [app]
 title = 水质监控
 package.name = esp32app
-package.domain = org.mqtt
+package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,otf,json
 source.include_patterns = ph_safe_table.jpg,Font_0.ttf
@@ -28,7 +28,7 @@ android.ndk_api = 21
 p4a.gradle_dependencies = gradle:7.6.4
 p4a.bootstrap = sdl2
 p4a.gradle_options = -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64
-android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE
+android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE,ACCESS_NETWORK_STATE
 
 #以下为release模式需要 following is required for release mode
 
