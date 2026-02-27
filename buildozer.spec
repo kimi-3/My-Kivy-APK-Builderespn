@@ -1,9 +1,10 @@
 [app]
-title = 测试
-package.name = esp32mqtt
+title = 水质监控
+package.name = esp32app
 package.domain = org.mqtt
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,otf,json
+source.include_patterns = ph_safe_table.jpg,Font_0.ttf
 #source.include_patterns = image/* 打包image目录下的文件 pack files in the image directory
 version = 0.0.1
 #fullscreen = 0
