@@ -1,17 +1,17 @@
 [app]
-title = appname#允许中文 Chinese allowed
-package.name = packagename
-package.domain = org.test#release模式不能用org.test org.test can't be used in release mode
-source.dir = .#工作目录 working directory
-source.include_exts = py,png,jpg,kv,atlas#需要打包的文件类型 file types to be packed
+title = 测试
+package.name = esp32mqtt
+package.domain = org.mqtt
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas,ttf,otf,json
 #source.include_patterns = image/* 打包image目录下的文件 pack files in the image directory
 version = 0.0.1
 #fullscreen = 0
-#orientation = portrait
-requirements = python3,kivy,kivymd,libiconv,libffi#依赖库,后二为打包需要 the last two are needed for packaging
+orientation = portrait
+requirements = python3,kivy==2.2.1,kivymd==1.2.0,libiconv,libffi,paho-mqtt
 #icon.filename = icon.png
 #presplash.filename = presplash.png
-entrypoint = main.py#主程序 main
+entrypoint = main.py
 
 #这些不要改 don't change these
 android.accept_sdk_license = True
@@ -27,7 +27,7 @@ android.ndk_api = 21
 p4a.gradle_dependencies = gradle:7.6.4
 p4a.bootstrap = sdl2
 p4a.gradle_options = -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64
-android.permissions = INTERNET#打包需要网络权限 network permission is required for packaging
+android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE
 
 #以下为release模式需要 following is required for release mode
 
