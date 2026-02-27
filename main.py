@@ -12,7 +12,7 @@ Config.set('graphics', 'fullscreen', '0')   # 非全屏（测试用，发布可�
 
 from kivymd.app import MDApp
 from esp32_mqtt_utils import Esp32MqttClient
-from app_ui_pages import create_app_ui
+from app_ui_pages import create_app_ui, add_global_log
 from kivy.clock import Clock
 
 
@@ -50,13 +50,18 @@ class Esp32MobileApp(MDApp):
                 data_callback=self._update_recv_data
             )
             self.mqtt_client.start_mqtt()
-            print("✅ MQTT客户端初始化完成")  # 新增：标记初始化完成
+            add_global_log("✅ MQTT客户端初始化完成")  # 写入全局日志
         except Exception as e:
-            self._update_recv_data(f"❌ MQTT初始化失败：{str(e)}")
-            print(f"❌ MQTT初始化异常：{str(e)}")
+            error_msg = f"❌ MQTT初始化失败：{str(e)}"
+            self._update_recv_data(error_msg)
+            add_global_log(error_msg)
 
     def _update_recv_data(self, content):
         """更新日志数据（线程安全）"""
+        # 1. 写入全局日志（手机日志页面可见）
+        add_global_log(content)
+        
+        # 2. 原有逻辑：更新个人中心日志
         global recv_data_list
         recv_data_list.append(content)
         # 限制日志条数，避免内存溢出
@@ -87,22 +92,7 @@ class Esp32MobileApp(MDApp):
             self.page_container.clear_widgets()
             self.current_page = create_me_page(self)
             self.page_container.add_widget(self.current_page)
-    def publish_command(self, topic, command):
-        """发布指令到MQTT服务器"""
-        # 新增：空值保护
-        if not self.mqtt_client:
-            self.data_callback("❌ MQTT客户端未创建，无法发送指令")
-            return False
-        if not self.connected:
-            self.data_callback("❌ MQTT未连接，无法发送指令")
-            return False
-        try:
-            self.mqtt_client.publish(topic, command, qos=0)
-            self.data_callback(f"📤 已发送：{command}")
-            return True
-        except Exception as e:
-            self.data_callback(f"❌ 发送失败：{str(e)}")
-            return False
+
 if __name__ == "__main__":
     """程序入口：启动APP主循环"""
     Esp32MobileApp().run()
