@@ -16,6 +16,30 @@ from ui_utils import NoBorderButton
 import json
 from kivymd.toast import toast
 
+# ========== 全局日志存储（所有页面共享） ==========
+GLOBAL_LOGS = []  # 存储所有日志
+MAX_LOG_LINES = 50  # 最多保留50条日志，避免内存溢出
+
+def add_global_log(log_content):
+    """添加日志到全局存储，并触发UI更新"""
+    global GLOBAL_LOGS
+    # 加上时间戳，方便排查
+    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+    log_with_time = f"[{timestamp}] {log_content}"
+    
+    GLOBAL_LOGS.append(log_with_time)
+    # 限制日志条数
+    if len(GLOBAL_LOGS) > MAX_LOG_LINES:
+        GLOBAL_LOGS = GLOBAL_LOGS[-MAX_LOG_LINES:]
+    
+    # 触发所有日志UI更新（如果有）
+    if hasattr(add_global_log, 'update_callbacks'):
+        for callback in add_global_log.update_callbacks:
+            callback()
+
+# 初始化日志更新回调列表
+add_global_log.update_callbacks = []
+
 # 全局变量：存储历史数据
 GLOBAL_HISTORY_DATA = []
 HISTORY_UPDATE_CALLBACKS = []
@@ -36,7 +60,74 @@ def update_history_data(new_record):
     for cb in HISTORY_UPDATE_CALLBACKS:
         cb()
 
-# 首页构建
+# ========== 日志页面 ==========
+def create_log_page(app_instance):
+    """创建独立的日志页面（手机上可直接查看）"""
+    log_layout = MDBoxLayout(
+        orientation="vertical",
+        padding=dp(10),
+        spacing=dp(10),
+        size_hint=(1, 1)
+    )
+
+    # 日志页面标题
+    log_title = MDLabel(
+        text="运行日志",
+        font_size=dp(20),
+        font_name="CustomChinese",
+        halign="center",
+        bold=True,
+        size_hint_y=None,
+        height=dp(50)
+    )
+    log_layout.add_widget(log_title)
+
+    # 日志滚动视图（核心：可上下滑动查看所有日志）
+    log_scroll = MDScrollView(
+        size_hint=(1, 1),
+        do_scroll_x=False,  # 禁止横向滚动
+        bar_width=dp(3),  # 滚动条宽度（手机上更易点击）
+        bar_color=(0.2, 0.5, 0.8, 1),  # 滚动条颜色
+        bar_inactive_color=(0.8, 0.8, 0.8, 1)
+    )
+
+    # 日志内容容器
+    log_content = MDLabel(
+        text="",
+        font_name="CustomChinese",
+        font_size=dp(14),
+        size_hint_y=None,
+        valign="top",
+        halign="left"
+    )
+    # 自动适配高度
+    log_content.bind(texture_size=lambda instance, size: setattr(instance, 'size', size))
+
+    # 更新日志UI的函数
+    def update_log_ui(*args):
+        # 拼接所有日志，换行分隔
+        log_text = "\n\n".join(GLOBAL_LOGS) if GLOBAL_LOGS else "暂无日志，等待MQTT连接..."
+        log_content.text = log_text
+        # 自动滚动到最新日志（底部）
+        Clock.schedule_once(lambda dt: setattr(log_scroll, 'scroll_y', 0), 0.1)
+
+    # 初始化时更新一次
+    update_log_ui()
+    # 注册到全局日志回调（有新日志时自动更新）
+    add_global_log.update_callbacks.append(update_log_ui)
+
+    log_scroll.add_widget(log_content)
+    log_layout.add_widget(log_scroll)
+
+    # 页面销毁时移除回调（避免内存泄漏）
+    def on_remove(instance, parent):
+        if update_log_ui in add_global_log.update_callbacks:
+            add_global_log.update_callbacks.remove(update_log_ui)
+    log_layout.bind(on_remove=on_remove)
+
+    return log_layout
+
+# ========== 首页构建 ==========
 def create_home_page(app_instance):
     home_layout = MDBoxLayout(
         orientation="vertical",
@@ -46,21 +137,21 @@ def create_home_page(app_instance):
     )
     home_layout.bind(minimum_height=home_layout.setter('height'))
     
-    # 注册MQTT回调（避免重复注册）
+    # 注册MQTT回调（增加重试机制，解决初始化时序问题）
     def register_mqtt_callback(dt):
         if app_instance and hasattr(app_instance, 'mqtt_client') and app_instance.mqtt_client:
             app_instance.mqtt_client.set_parsed_data_callback(update_sensor_ui_and_record_history)
-            print("✅ MQTT回调注册成功")
+            add_global_log("✅ MQTT回调注册成功")
         else:
             # 延迟1秒重试（最多重试5次）
             if not hasattr(register_mqtt_callback, 'retry_count'):
                 register_mqtt_callback.retry_count = 0
             register_mqtt_callback.retry_count += 1
             if register_mqtt_callback.retry_count <= 5:
-                print(f"⚠️ MQTT客户端未初始化，{register_mqtt_callback.retry_count}秒后重试...")
+                add_global_log(f"⚠️ MQTT客户端未初始化，{register_mqtt_callback.retry_count}秒后重试...")
                 Clock.schedule_once(register_mqtt_callback, 1)
             else:
-                print("❌ MQTT回调注册失败：达到最大重试次数")
+                add_global_log("❌ MQTT回调注册失败：达到最大重试次数")
     # 初始延迟1秒（给MQTT更多初始化时间）
     Clock.schedule_once(register_mqtt_callback, 1)
 
@@ -119,8 +210,11 @@ def create_home_page(app_instance):
             history_record = f"{current_time}: 溶解氧{do_val}mg/L | PH{ph_val} | 温度{temp_val}℃"
             
             update_history_data(history_record)
+            add_global_log(f"📊 传感器数据更新：{history_record}")
 
         except (ValueError, TypeError):
+            error_msg = "❌ 传感器数据格式异常"
+            add_global_log(error_msg)
             do_label.text = "溶解氧: 数据异常mg/L"
             ph_label.text = "PH值: 数据异常"
             temp_label.text = "温度: 数据异常℃"
@@ -166,12 +260,13 @@ def create_home_page(app_instance):
             send_result = mqtt_client.publish_command("esp32/switch", send_data)
             if send_result:
                 toast(f"设备{cmd_desc}成功")
+                add_global_log(f"📱 手动开关操作：设备{cmd_desc}")
             else:
                 raise Exception("MQTT未连接")
         
         except Exception as e:
             error_msg = f"❌ 开关操作失败：{str(e)}"
-            print(error_msg)
+            add_global_log(error_msg)
             toast(error_msg)
 
     switch_btn.bind(on_press=toggle_switch)
@@ -201,7 +296,7 @@ def create_home_page(app_instance):
         height=dp(40)
     )
     max_label = MDLabel(text="设置最高值:", font_size=dp(16), font_name="CustomChinese")
-    max_textfield = MDTextField(hint_text="", size_hint_x=1)
+    max_textfield = MDTextField(hint_text="例如：8.0（溶解氧上限）", size_hint_x=1)
     max_input.add_widget(max_label)
     max_input.add_widget(max_textfield)
 
@@ -212,7 +307,7 @@ def create_home_page(app_instance):
         height=dp(40)
     )
     min_label = MDLabel(text="设置最低值:", font_size=dp(16), font_name="CustomChinese")
-    min_textfield = MDTextField(hint_text="", size_hint_x=1)
+    min_textfield = MDTextField(hint_text="例如：6.0（溶解氧下限）", size_hint_x=1)
     min_input.add_widget(min_label)
     min_input.add_widget(min_textfield)
 
@@ -261,7 +356,7 @@ def create_home_page(app_instance):
             float(min_val)
         except ValueError:
             error_msg = f"❌ 阈值输入无效：请输入数字"
-            print(error_msg)
+            add_global_log(error_msg)
             app_instance._update_recv_data(error_msg)
             Clock.schedule_once(lambda x: instance.reset_button_state(), 2)
             return
@@ -275,7 +370,7 @@ def create_home_page(app_instance):
             }, ensure_ascii=False)
         except Exception as e:
             error_msg = f"❌ 构造JSON失败：{str(e)}"
-            print(error_msg)
+            add_global_log(error_msg)
             app_instance._update_recv_data(error_msg)
             Clock.schedule_once(lambda x: instance.reset_button_state(), 2)
             return
@@ -288,13 +383,14 @@ def create_home_page(app_instance):
             send_result = app_instance.mqtt_client.publish_command("esp32/threshold", threshold_data)
             if send_result:
                 success_msg = f"✅ 阈值已发送：最高{max_val} | 最低{min_val}"
+                add_global_log(success_msg)
                 app_instance._update_recv_data(success_msg)
             else:
                 raise Exception("MQTT未连接")
         
         except Exception as e:
             error_msg = f"❌ 发送阈值失败：{str(e)}"
-            print(error_msg)
+            add_global_log(error_msg)
             app_instance._update_recv_data(error_msg)
         
         Clock.schedule_once(lambda x: instance.reset_button_state(), 2)
@@ -315,6 +411,7 @@ def create_home_page(app_instance):
         instance.update_button_colors()
         from ui_utils import switch_page
         switch_page(app_instance, "history")
+        add_global_log("📱 切换到历史数据页面")
         Clock.schedule_once(lambda x: instance.reset_button_state(), 2)
     history_btn.bind(on_press=on_history_click)
 
@@ -335,7 +432,7 @@ def create_home_page(app_instance):
     sensor_layout.add_widget(temp_label)
     home_layout.add_widget(sensor_layout)
 
-
+    # PH安全范围图片（取消注释需放置ph_safe_table.jpg到根目录）
     ph_table_layout = MDBoxLayout(
         orientation="horizontal",
         size_hint_y=None,
@@ -355,7 +452,7 @@ def create_home_page(app_instance):
     ph_note_layout = MDBoxLayout(
         orientation="horizontal",
         size_hint_y=None,
-        height=dp(40)  # 增加高度，优化显示
+        height=dp(40)
     )
     ph_note_label = MDLabel(
         text="PH值安全范围在6~9",
@@ -369,7 +466,7 @@ def create_home_page(app_instance):
 
     return home_layout
 
-# 历史数据页面
+# ========== 历史数据页面 ==========
 def create_history_page(app_instance):
     history_layout = MDBoxLayout(
         orientation="vertical",
@@ -434,6 +531,7 @@ def create_history_page(app_instance):
     refresh_history_ui()
     # 注册回调（切换页面时自动刷新）
     register_history_callback(refresh_history_ui)
+    add_global_log("📱 进入历史数据页面")
 
     scroll_view.add_widget(scroll_content)
     history_layout.add_widget(scroll_view)
@@ -441,11 +539,12 @@ def create_history_page(app_instance):
     # 页面销毁时注销回调
     def on_remove(instance, parent):
         unregister_history_callback(refresh_history_ui)
+        add_global_log("📱 退出历史数据页面")
     history_layout.bind(on_remove=on_remove)
 
     return history_layout
 
-# 个人中心页面
+# ========== 个人中心页面 ==========
 def create_me_page(app_instance):
     me_layout = MDBoxLayout(
         orientation="vertical",
@@ -521,10 +620,11 @@ def create_me_page(app_instance):
     log_label.text = "\n".join(recv_data_list) + "\n"
     log_scroll_view.add_widget(log_label)
     me_layout.add_widget(log_scroll_view)
+    add_global_log("📱 进入个人中心页面")
 
     return me_layout
 
-# 整体UI构建
+# ========== 整体UI构建 ==========
 def create_app_ui(app_instance):
     # 基础配置
     Window.orientation = 'portrait'
@@ -560,13 +660,13 @@ def create_app_ui(app_instance):
     app_instance.page_container.add_widget(app_instance.current_page)
     main_container.add_widget(app_instance.page_container)
 
-    # 底部导航栏
+    # 底部导航栏（首页+日志+我的）
     bottom_nav_bar = MDBoxLayout(
         orientation="horizontal",
         size_hint_y=None,
         height=dp(60),
-        padding=[dp(60), dp(5), dp(60), dp(5)],
-        spacing=Window.width * 0.2,
+        padding=[dp(20), dp(5), dp(20), dp(5)],
+        spacing=Window.width * 0.1,
         md_bg_color=(1, 1, 1, 1),
         pos_hint={"center_x": 0.5, "y": 0.0}
     )
@@ -577,7 +677,8 @@ def create_app_ui(app_instance):
             pos=(bottom_nav_bar.x, bottom_nav_bar.y + bottom_nav_bar.height),
             size=(bottom_nav_bar.width, 2)
         )
-    # 首页导航项
+    
+    # 1. 首页导航项
     nav_item1 = MDBoxLayout(
         orientation="vertical",
         size_hint_x=1,
@@ -604,7 +705,7 @@ def create_app_ui(app_instance):
     nav_item1.add_widget(nav_item1_icon)
     nav_item1.add_widget(nav_item1_text)
 
-    # 个人中心导航项
+    # 2. 日志导航项
     nav_item2 = MDBoxLayout(
         orientation="vertical",
         size_hint_x=1,
@@ -612,16 +713,16 @@ def create_app_ui(app_instance):
         pos_hint={"center_x": 0.5, "center_y": 0.5}
     )
     nav_item2_icon = MDIconButton(
-        icon="account-circle",
+        icon="file-document-outline",
         size_hint=(None, None),
         size=(dp(24), dp(24)),
         pos_hint={"center_x": 0.5},
         md_bg_color=(1, 1, 1, 0),
         text_color=(0, 0, 0, 1)
     )
-    nav_item2_icon.bind(on_press=lambda x: switch_page(app_instance, "me"))
+    nav_item2_icon.bind(on_press=lambda x: switch_page(app_instance, "log"))
     nav_item2_text = MDLabel(
-        text="我",
+        text="日志",
         font_size=dp(12),
         font_name="CustomChinese",
         halign="center",
@@ -630,8 +731,36 @@ def create_app_ui(app_instance):
     nav_item2.add_widget(nav_item2_icon)
     nav_item2.add_widget(nav_item2_text)
 
+    # 3. 个人中心导航项
+    nav_item3 = MDBoxLayout(
+        orientation="vertical",
+        size_hint_x=1,
+        spacing=dp(2),
+        pos_hint={"center_x": 0.5, "center_y": 0.5}
+    )
+    nav_item3_icon = MDIconButton(
+        icon="account-circle",
+        size_hint=(None, None),
+        size=(dp(24), dp(24)),
+        pos_hint={"center_x": 0.5},
+        md_bg_color=(1, 1, 1, 0),
+        text_color=(0, 0, 0, 1)
+    )
+    nav_item3_icon.bind(on_press=lambda x: switch_page(app_instance, "me"))
+    nav_item3_text = MDLabel(
+        text="我",
+        font_size=dp(12),
+        font_name="CustomChinese",
+        halign="center",
+        color=(0, 0, 0, 1)
+    )
+    nav_item3.add_widget(nav_item3_icon)
+    nav_item3.add_widget(nav_item3_text)
+
     bottom_nav_bar.add_widget(nav_item1)
     bottom_nav_bar.add_widget(nav_item2)
+    bottom_nav_bar.add_widget(nav_item3)
     main_container.add_widget(bottom_nav_bar)
 
+    add_global_log("✅ APP UI初始化完成")
     return main_container
