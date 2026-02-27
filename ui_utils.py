@@ -60,12 +60,13 @@ class NoBorderButton(ButtonBehavior, MDLabel):
 def register_chinese_font():
     LabelBase.register(
         name="CustomChinese",
-        fn_regular="Font_0.ttf"  # 替换为你的中文字体文件
+        fn_regular="Font_0.ttf"  # 替换为你的中文字体文件（如simhei.ttf）
     )
 
 # 页面切换工具函数
 def switch_page(app_instance, page_name):
-    from app_ui_pages import create_home_page, create_me_page, create_history_page, unregister_history_callback, HISTORY_UPDATE_CALLBACKS
+    from app_ui_pages import create_home_page, create_me_page, create_history_page, create_log_page
+    from app_ui_pages import unregister_history_callback, HISTORY_UPDATE_CALLBACKS
     # 清理历史页面回调
     if hasattr(app_instance, 'current_page') and app_instance.current_page:
         page_texts = [child.text for child in app_instance.current_page.children if hasattr(child, 'text')]
@@ -81,4 +82,6 @@ def switch_page(app_instance, page_name):
         app_instance.current_page = create_me_page(app_instance)
     elif page_name == "history":
         app_instance.current_page = create_history_page(app_instance)
+    elif page_name == "log":
+        app_instance.current_page = create_log_page(app_instance)
     app_instance.page_container.add_widget(app_instance.current_page)
