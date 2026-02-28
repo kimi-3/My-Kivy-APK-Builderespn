@@ -9,7 +9,7 @@ source.include_patterns = ph_safe_table.jpg,Font_0.ttf
 version = 0.0.1
 #fullscreen = 0
 orientation = portrait
-requirements = python3,kivy==2.2.1,kivymd==1.2.0,libiconv,libffi,paho-mqtt
+requirements = python3,kivy==2.2.1,kivymd==1.2.0,sqlite3,pyjnius,requests
 #icon.filename = icon.png
 #presplash.filename = presplash.png
 entrypoint = main.py
