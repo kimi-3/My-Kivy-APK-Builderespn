@@ -764,3 +764,4 @@ def create_app_ui(app_instance):
 
     add_global_log("✅ APP UI初始化完成")
     return main_container
+
