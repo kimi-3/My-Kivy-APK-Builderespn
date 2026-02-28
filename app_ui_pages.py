@@ -19,33 +19,79 @@ from kivymd.toast import toast
 import sqlite3
 import os
 
-# ========== 数据库工具函数（新增，仅用于历史数据页） ==========
+from kivymd.toast import toast
+# 新增数据库相关导入（核心）
+import sqlite3
+import os
+import sys
+from kivy.utils import platform  # 关键：Kivy官方的平台判断工具
+
+# ========== 数据库工具函数（完整适配PC/安卓） ==========
 def get_db_path():
-    """获取数据库路径（兼容PC/手机）"""
-    if os.name == 'nt':  # Windows
+    """
+    获取数据库路径（兼容PC/安卓，优先使用应用私有目录）
+    安卓端：使用应用私有存储（无需额外权限），避免读写外部存储的权限问题
+    """
+    try:
+        if platform == 'android':
+            # 安卓端：获取应用私有目录（推荐），比app_storage_path更稳定
+            from android import mActivity
+            # 获取应用内部存储目录（/data/data/esp32app/files/）
+            app_files_dir = mActivity.getApplicationContext().getFilesDir().getPath()
+            db_path = os.path.join(app_files_dir, "sensor_data.db")
+        else:
+            # PC端（Windows/Linux/Mac）：当前目录
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sensor_data.db")
+        
+        # 确保数据库目录存在（避免创建数据库时报错）
+        db_dir = os.path.dirname(db_path)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+        
+        return db_path
+    except Exception as e:
+        # 容错：返回当前目录（避免完全崩溃）
+        toast(f"获取数据库路径失败：{str(e)}")
         return "sensor_data.db"
-    else:  # Android
-        try:
-            from android.storage import app_storage_path
-            return os.path.join(app_storage_path(), "sensor_data.db")
-        except:
-            return "sensor_data.db"
+
 def init_db_if_not_exists():
-    """初始化数据库表（首次运行自动创建）"""
-    conn = sqlite3.connect(get_db_path())
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sensor_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            record_date TEXT,  -- 日期（YYYY-MM-DD）
-            record_time TEXT,  -- 时间（YYYY-MM-DD HH:MM:SS）
-            do_value REAL,     -- 溶解氧
-            ph_value REAL,     -- PH值
-            temp_value REAL    -- 温度
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    """
+    初始化数据库表（首次运行自动创建）
+    增加异常捕获，避免表已存在/权限问题导致APP崩溃
+    """
+    try:
+        db_path = get_db_path()
+        # 连接数据库（不存在则自动创建）
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 修复：SQL注释用--，避免#导致语法错误
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sensor_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_date TEXT,  -- 日期（YYYY-MM-DD）
+                record_time TEXT,  -- 时间（YYYY-MM-DD HH:MM:SS）
+                do_value REAL,     -- 溶解氧
+                ph_value REAL,     -- PH值
+                temp_value REAL    -- 温度
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        # 调试：安卓端弹出提示（可选）
+        if platform == 'android':
+            toast(f"数据库初始化成功：{db_path}")
+    except sqlite3.OperationalError as e:
+        # 捕获SQL语法/权限错误
+        error_msg = f"数据库表创建失败：{str(e)}"
+        toast(error_msg)
+        print(error_msg)  # 打包后通过ADB日志查看
+    except Exception as e:
+        # 捕获其他异常（如路径错误）
+        error_msg = f"数据库初始化异常：{str(e)}"
+        toast(error_msg)
+        print(error_msg)
 def insert_sensor_record_to_db(do, ph, temp):
     """插入传感器数据到数据库"""
     init_db_if_not_exists()
