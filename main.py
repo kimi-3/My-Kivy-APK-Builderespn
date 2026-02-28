@@ -14,6 +14,22 @@ from kivymd.app import MDApp
 from esp32_mqtt_utils import Esp32MqttClient
 from app_ui_pages import create_app_ui, add_global_log
 from kivy.clock import Clock
+from kivymd.app import MDApp
+from kivy.utils import platform
+
+# 安卓权限申请（必须！否则数据库/网络无法使用）
+if platform == 'android':
+    from android.permissions import request_permissions, Permission
+    # 申请所需权限
+    request_permissions([
+        Permission.INTERNET,          # MQTT联网
+        Permission.WRITE_EXTERNAL_STORAGE,  # 外部存储（备用）
+        Permission.READ_EXTERNAL_STORAGE    # 外部存储（备用）
+    ])
+
+# 初始化数据库（APP启动时执行）
+from app_ui_pages import init_db_if_not_exists
+init_db_if_not_exists()
 
 
 class Esp32MobileApp(MDApp):
