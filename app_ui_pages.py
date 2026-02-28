@@ -18,11 +18,6 @@ from kivymd.toast import toast
 # 新增数据库相关导入（核心）
 import sqlite3
 import os
-
-from kivymd.toast import toast
-# 新增数据库相关导入（核心）
-import sqlite3
-import os
 import sys
 from kivy.utils import platform  # 关键：Kivy官方的平台判断工具
 
@@ -952,3 +947,4 @@ def create_app_ui(app_instance):
 
     add_global_log("✅ APP UI初始化完成")
     return main_container
+
