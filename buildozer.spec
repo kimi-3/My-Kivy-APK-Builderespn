@@ -23,12 +23,17 @@ android.gradle_plugin = 7.2.0
 p4a.gradle_dependencies = gradle:7.2.0
 p4a.bootstrap = sdl2
 p4a.gradle_options = -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64
-# 基础权限（仅保留必须）
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+
+# ========== 修复后的权限配置（核心！） ==========
+# 完整权限（覆盖MQTT/存储/定位/网络）
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE,ACCESS_NETWORK_STATE,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION
+# 安卓11+存储权限适配
+android.extra_manifest_headers = <application android:requestLegacyExternalStorage="true"/>
+# 启动时主动申请权限
+android.request_android_permissions = True
 
 # 关键配置（确保生成APK）
 android.add_assets = Font_0.ttf,ph_safe_table.jpg
-android.request_android_permissions = True
 android.debug = True
 android.aab = False  # 强制APK
 
