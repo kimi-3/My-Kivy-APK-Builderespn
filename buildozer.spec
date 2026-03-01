@@ -9,7 +9,8 @@ source.include_patterns = ph_safe_table.jpg,Font_0.ttf
 version = 0.0.1
 #fullscreen = 0
 orientation = portrait
-requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius,requests,kivy-garden
+# 修复后的依赖（关键！）
+requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0,requests==2.31.0,kivy-garden==0.1.4,openssl,sqlite3
 #icon.filename = icon.png
 #presplash.filename = presplash.png
 entrypoint = main.py
@@ -28,14 +29,23 @@ android.ndk_api = 21
 p4a.gradle_dependencies = gradle:7.6.4
 p4a.bootstrap = sdl2
 p4a.gradle_options = -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64
-android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+# 修复后的权限（关键！）
+android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION
+
+# 新增核心配置（解决闪退/APK打包问题）
+android.add_assets = Font_0.ttf,ph_safe_table.jpg
+android.request_android_permissions = True
+android.extra_manifest_headers = android:requestLegacyExternalStorage="true"
+android.debug = True
+android.aab = False
+p4a.build_mode = debug
+p4a.add_jars = androidx.core:core:1.10.1,com.google.android.material:material:1.11.0
+p4a.add_aars = 
+p4a.mavens = https://maven.google.com
 
 #以下为release模式需要 following is required for release mode
 
-#强制构建APK而不是AAB,但没用 why does it build .aab instead of .apk?
-#android.aab = False
-
-#签名配置 signature configuration
+#强制构建APK而不是AAB（现在生效了）
 #android.keystore = /home/runner/work/RepositoryName/AndAgain/DomainName.PackageName.keystore
 #android.keystore_storepass = android
 #android.keystore_keypass = android
