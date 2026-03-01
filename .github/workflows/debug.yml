@@ -8,103 +8,143 @@ permissions:
   actions: read
   checks: read
 
+# 核心优化：增大构建虚拟机资源 + 国内镜像加速
 env:
   ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
   ANDROID_HOME: /usr/local/lib/android/sdk
   JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
   CYTHON_LANGUAGE_LEVEL: "3"
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.java-home=$JAVA_HOME -Dorg.gradle.jvmargs=-Xmx2048m"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.java-home=$JAVA_HOME -Dorg.gradle.jvmargs=-Xmx4096m"
+  # 国内镜像加速依赖下载（关键！解决超时）
+  PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+  ANDROID_SDK_DOWNLOAD_SOURCE: https://mirrors.tuna.tsinghua.edu.cn/android-sdk/
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    
+    # 增大虚拟机资源（避免内存不足）
+    timeout-minutes: 60
+    resources:
+      cpu: 4
+      memory: 8G
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: 🔥 修复1：清理系统残留 + 扩容磁盘
+      run: |
+        # 清理系统垃圾（释放空间）
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager
+        # 扩容临时目录（避免磁盘不足）
+        sudo fallocate -l 10G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
 
     - name: Set up Java 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: gradle  # 缓存Gradle，加速构建
 
-    - name: Set up Python
+    - name: Set up Python 3.9
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'  # 适配Cython 0.29.33
+        python-version: '3.9'
+        cache: pip  # 缓存pip依赖
 
-    - name: Install system dependencies
+    - name: 🔥 修复2：安装完整系统依赖（补全缺失项）
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-            git zip unzip \
-            python3-pip autoconf automake libtool \
-            pkg-config zlib1g-dev libncurses5-dev \
-            libncursesw5-dev cmake libffi-dev libssl-dev \
-            curl unzip openjdk-17-jdk libltdl-dev
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends \
+            git zip unzip wget \
+            python3-pip python3-setuptools python3-dev \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev libltdl-dev \
+            openjdk-17-jdk-headless ant \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+        # 升级pip到最新版
+        python -m pip install --upgrade pip setuptools wheel
 
-    - name: Install Buildozer and dependencies
+    - name: 🔥 修复3：安装Buildozer + 固定依赖版本（避免冲突）
       run: |
-        python -m pip install --upgrade pip
-        # 安装固定版本依赖（匹配buildozer.spec）
-        pip install buildozer cython==0.29.33 kivy==2.2.1 kivymd==1.2.0
-        pip install python-for-android
+        # 安装Buildozer（指定稳定版本）
+        pip install buildozer==1.5.0
+        # 安装Python-for-Android（指定兼容版本）
+        pip install python-for-android==2023.07.03
+        # 安装项目依赖（匹配buildozer.spec）
+        pip install cython==0.29.33 kivy==2.2.1 kivymd==1.2.0 pyjnius==1.4.0 requests==2.31.0
 
-    - name: 🔥 关键：清理Buildozer所有缓存（确保新配置生效）
+    - name: 🔥 修复4：彻底清理所有缓存（核心！）
       run: |
-        # 清理buildozer本地缓存
+        # 清理Buildozer项目缓存
         buildozer android clean || true
-        # 删除全局缓存目录（核心！）
+        # 删除全局缓存（强制重新下载依赖）
         rm -rf ~/.buildozer/
-        # 删除本地构建目录
-        rm -rf ./bin/ ./build/
-        # 清理pip缓存（避免依赖版本冲突）
-        pip cache purge
+        rm -rf ~/.cache/pip/
+        rm -rf ~/.gradle/
+        # 删除本地构建产物
+        rm -rf ./bin/ ./build/ ./.__main__.py
 
-    - name: Build APK with Buildozer
+    - name: 🔥 修复5：预下载Gradle（解决下载超时）
+      run: |
+        # 创建Gradle缓存目录
+        mkdir -p ~/.buildozer/android/platform/buildozer-gradle/
+        # 预下载Gradle 7.2.0（兼容你的配置）
+        wget -q -O ~/.buildozer/android/platform/buildozer-gradle/gradle-7.2.0-all.zip \
+            https://services.gradle.org/distributions/gradle-7.2.0-all.zip
+
+    - name: Build APK with Buildozer（带详细日志）
       run: |
         export PATH="$HOME/.local/bin:$PATH"
-        echo "===== 环境检查 ====="
+        # 环境检查（输出关键信息）
+        echo "===== 环境信息 ====="
         java -version
         python --version
         buildozer --version
+        df -h  # 检查磁盘空间
+        free -m # 检查内存
         
-        # 修复依赖下载网络问题
-        export BUILDODER_ALLOW_PLATFORM_EXEC=1
-        export USE_COLORS=0
+        # 关键：强制使用预下载的Gradle
+        sed -i 's/android.gradle_download =.*/android.gradle_download = file:\/\/\/home\/runner\/.buildozer\/android\/platform\/buildozer-gradle\/gradle-7.2.0-all.zip/' buildozer.spec
+        sed -i 's/android.gradle_plugin =.*/android.gradle_plugin = 7.2.0/' buildozer.spec
+        sed -i 's/p4a.gradle_dependencies =.*/p4a.gradle_dependencies = gradle:7.2.0/' buildozer.spec
         
-        # 调试模式构建（输出详细日志）
+        # 构建APK（输出所有日志）
         buildozer -v android debug 2>&1 | tee buildozer.log
         
-        # 复制生成的APK到当前目录（方便上传）
-        find . -name "*.apk" -exec cp {} ./ \; 2>/dev/null || true
-
-    - name: Check if APK was built
-      id: check-build
-      run: |
-        if ls *.apk 1> /dev/null 2>&1; then
-          echo "BUILD_FINAL_SUCCESS=true" >> $GITHUB_OUTPUT
-          echo "===== 生成的APK文件 ====="
-          ls -la *.apk
+        # 查找APK并复制到根目录（兼容所有路径）
+        echo "===== 查找APK文件 ====="
+        find /home/runner -name "*.apk" -type f | tee apk_list.txt
+        if [ -s apk_list.txt ]; then
+          cp $(cat apk_list.txt | head -n1) ./esp32app-debug.apk
+          echo "===== 生成的APK信息 ====="
+          ls -la ./esp32app-debug.apk
         else
-          echo "BUILD_FINAL_SUCCESS=false" >> $GITHUB_OUTPUT
           echo "❌ 未找到APK文件"
+          exit 1
         fi
 
     - name: Upload APK artifact
-      if: steps.check-build.outputs.BUILD_FINAL_SUCCESS == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: kivy-app-apk
-        path: bin/*.apk
+        path: ./esp32app-debug.apk
         retention-days: 30
 
-    - name: Upload build logs
+    - name: Upload debug logs（包含所有关键信息）
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: build-logs
+        name: full-build-logs
         path: |
           buildozer.log
+          apk_list.txt
+          buildozer.spec
         retention-days: 7
