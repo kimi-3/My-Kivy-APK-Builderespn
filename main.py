@@ -32,14 +32,11 @@ if platform == 'android':
     def request_app_permissions(*args):
         request_permissions(REQUIRED_PERMISSIONS, on_permissions_granted)
     
-    # 权限授予后的回调（初始化数据库）
     def on_permissions_granted(permissions, grants):
-        """权限申请完成后初始化数据库"""
         try:
             from app_ui_pages import init_db_if_not_exists
             init_db_if_not_exists()
-            from app_ui_pages import add_global_log
-            add_global_log("✅ 权限申请完成，数据库初始化成功")
+            ...
         except Exception as e:
             print(f"权限授予后初始化数据库失败：{e}")
 
@@ -69,9 +66,15 @@ class Esp32MobileApp(MDApp):
         
         # 分步初始化（按优先级，避免闪退）
         if platform == 'android':
-            # 安卓端：先申请权限，再初始化MQTT
-            Clock.schedule_once(request_app_permissions, 0.1)
-            Clock.schedule_once(lambda dt: self._init_mqtt_client(), 1.0)
+            try:
+                from android import mActivity
+                app_files_dir = mActivity.getApplicationContext().getFilesDir().getPath()
+                db_path = os.path.join(app_files_dir, "sensor_data.db")
+            except Exception as e:
+                # fallback 或提示
+                db_path = "sensor_data.db"
+                from kivymd.toast import toast
+                toast(f"数据库路径获取失败：{e}")
         else:
             # PC端：直接初始化数据库和MQTT
             try:
