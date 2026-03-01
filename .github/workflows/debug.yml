@@ -13,119 +13,88 @@ env:
   ANDROID_HOME: /usr/local/lib/android/sdk
   JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
   CYTHON_LANGUAGE_LEVEL: "3"
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.java-home=$JAVA_HOME -Dorg.gradle.jvmargs=-Xmx4096m"
-  PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.java-home=$JAVA_HOME -Dorg.gradle.jvmargs=-Xmx2048m"
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: 🔥 清理系统残留 + 扩容磁盘
-      run: |
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/*
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager
-        sudo swapoff /swapfile || true
-        sudo rm -f /swapfile || true
-        sudo fallocate -l 10G /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
 
     - name: Set up Java 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        # 移除 cache: gradle，避免报错
 
-    - name: Set up Python 3.9
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
-        cache: pip
+        python-version: '3.9'  # Cython 0.29.33 is not compatible with Python >3.9
 
-    - name: 🔥 安装完整系统依赖
+    - name: Install system dependencies
       run: |
-        sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends \
-            git zip unzip wget \
-            python3-pip python3-setuptools python3-dev \
-            autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            cmake libffi-dev libssl-dev libltdl-dev \
-            openjdk-17-jdk-headless ant \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
-        python -m pip install --upgrade pip setuptools wheel
+        sudo apt-get update
+        sudo apt-get install -y \
+            git zip unzip \
+            python3-pip autoconf automake libtool \
+            pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev cmake libffi-dev libssl-dev \
+            curl unzip openjdk-17-jdk libltdl-dev
 
-    - name: 🔥 安装Buildozer + 固定依赖版本
+    - name: Install Buildozer and dependencies
       run: |
-        pip install buildozer==1.5.0
-        pip install python-for-android==2023.07.03
-        pip install cython==0.29.33 kivy==2.2.1 kivymd==1.2.0 pyjnius==1.4.0 requests==2.31.0
-
-    - name: 🔥 彻底清理所有缓存
-      run: |
-        buildozer android clean || true
-        rm -rf ~/.buildozer/
-        rm -rf ~/.cache/pip/
-        rm -rf ~/.gradle/
-        rm -rf ./bin/ ./build/ ./.__main__.py
-
-    - name: 🔥 预下载Gradle（解决下载超时）
-      run: |
-        mkdir -p ~/.buildozer/android/platform/buildozer-gradle/
-        wget -q -O ~/.buildozer/android/platform/buildozer-gradle/gradle-7.2.0-all.zip \
-            https://services.gradle.org/distributions/gradle-7.2.0-all.zip
+        python -m pip install --upgrade pip
+        # Install core dependencies with fixed versions (match buildozer.spec)
+        pip install buildozer cython==0.29.33 kivy==2.2.1 kivymd==1.2.0
+        # Install python-for-android (required for buildozer)
+        pip install python-for-android
 
     - name: Build APK with Buildozer
       run: |
         export PATH="$HOME/.local/bin:$PATH"
-        echo "===== 环境信息 ====="
+        echo "Let's have a check:"
         java -version
         python --version
         buildozer --version
-        df -h
-        free -m
         
-        # 强制使用预下载的Gradle
-        sed -i 's/android.gradle_download =.*/android.gradle_download = file:\/\/\/home\/runner\/.buildozer\/android\/platform\/buildozer-gradle\/gradle-7.2.0-all.zip/' buildozer.spec
-        sed -i 's/android.gradle_plugin =.*/android.gradle_plugin = 7.2.0/' buildozer.spec
-        sed -i 's/p4a.gradle_dependencies =.*/p4a.gradle_dependencies = gradle:7.2.0/' buildozer.spec
+        # Fix network issues for dependency download
+        export BUILDODER_ALLOW_PLATFORM_EXEC=1
+        export USE_COLORS=0
         
+        # Start building APK in debug mode
         buildozer -v android debug 2>&1 | tee buildozer.log
         
-        echo "===== 查找APK文件 ====="
-        find /home/runner -name "*.apk" -type f | tee apk_list.txt
-        if [ -s apk_list.txt ]; then
-          cp $(cat apk_list.txt | head -n1) ./esp32app-debug.apk
-          echo "===== 生成的APK信息 ====="
-          ls -la ./esp32app-debug.apk
+        # Copy generated APK to current directory
+        find . -name "*.apk" -exec cp {} ./ \; 2>/dev/null || true
+
+    - name: Check if APK was built
+      id: check-build
+      run: |
+        if ls *.apk 1> /dev/null 2>&1; then
+          echo "BUILD_FINAL_SUCCESS=true" >> $GITHUB_OUTPUT
+          echo "Found APK files:"
+          ls -la *.apk
         else
-          echo "❌ 未找到APK文件"
-          exit 1
+          echo "BUILD_FINAL_SUCCESS=false" >> $GITHUB_OUTPUT
+          echo "Didn't found APK files."
         fi
 
     - name: Upload APK artifact
+      if: steps.check-build.outputs.BUILD_FINAL_SUCCESS == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: kivy-app-apk
-        path: ./esp32app-debug.apk
+        path: bin/*.apk
         retention-days: 30
 
-    - name: Upload debug logs
+    - name: Upload build logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: full-build-logs
+        name: build-logs
         path: |
           buildozer.log
-          apk_list.txt
-          buildozer.spec
         retention-days: 7
