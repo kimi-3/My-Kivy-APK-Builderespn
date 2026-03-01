@@ -8,7 +8,7 @@ source.include_patterns = ph_safe_table.jpg,Font_0.ttf
 version = 0.0.1
 orientation = portrait
 # 最简依赖（仅保留核心）
-requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0
+requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0,sqlite3,android
 entrypoint = main.py
 
 # 基础配置（降级版本，确保兼容）
