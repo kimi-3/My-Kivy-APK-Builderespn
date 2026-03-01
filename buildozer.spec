@@ -1,45 +1,36 @@
 [app]
 title = 水质监控
-package.name = esp32mqtt
-package.domain = org.mqtt
+package.name = esp32app
+package.domain = org.test
 source.dir = .
-source.include_exts = ppy,png,jpg,kv,atlas,ttf,otf,json
-#source.include_patterns = image/* 打包image目录下的文件 pack files in the image directory
+source.include_exts = py,png,jpg,kv,ttf
+source.include_patterns = ph_safe_table.jpg,Font_0.ttf
 version = 0.0.1
-#fullscreen = 0
 orientation = portrait
-requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0,requests==2.31.0,kivy-garden==0.1.4
-#icon.filename = icon.png
-#presplash.filename = presplash.png
+# 最简依赖（仅保留核心）
+requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0
 entrypoint = main.py
 
-#这些不要改 don't change these
+# 基础配置（降级版本，确保兼容）
 android.accept_sdk_license = True
-android.allow_api_min = 21
-android.api = 33
+android.api = 31
 android.minapi = 21
-android.ndk = 25b
-exclude_patterns = **/test/*, **/tests/*
-android.gradle_download = https://services.gradle.org/distributions/gradle-7.6.4-all.zip
-android.gradle_plugin = 7.4.2
-android.sdk = 33
+android.ndk = 24b
 android.ndk_api = 21
-p4a.gradle_dependencies = gradle:7.6.4
+android.sdk = 31
+exclude_patterns = **/test/*, **/tests/*
+android.gradle_plugin = 7.2.0
+p4a.gradle_dependencies = gradle:7.2.0
 p4a.bootstrap = sdl2
 p4a.gradle_options = -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64
-android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION
+# 基础权限（仅保留必须）
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
-
-#以下为release模式需要 following is required for release mode
-
-#强制构建APK而不是AAB,但没用 why does it build .aab instead of .apk?
-#android.aab = False
-
-#签名配置 signature configuration
-#android.keystore = /home/runner/work/RepositoryName/AndAgain/DomainName.PackageName.keystore
-#android.keystore_storepass = android
-#android.keystore_keypass = android
-#android.keystore_alias = DomainName.PackageName
+# 关键配置（确保生成APK）
+android.add_assets = Font_0.ttf,ph_safe_table.jpg
+android.request_android_permissions = True
+android.debug = True
+android.aab = False  # 强制APK
 
 [buildozer]
 log_level = 2
