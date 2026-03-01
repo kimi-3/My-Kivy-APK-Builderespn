@@ -5,17 +5,13 @@ package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,otf,json
 source.include_patterns = ph_safe_table.jpg,Font_0.ttf
-#source.include_patterns = image/* 打包image目录下的文件 pack files in the image directory
 version = 0.0.1
-#fullscreen = 0
 orientation = portrait
-# 修复后的依赖（关键！）
-requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0,requests==2.31.0,kivy-garden==0.1.4,openssl,sqlite3
-#icon.filename = icon.png
-#presplash.filename = presplash.png
+# 精简依赖（移除冗余的sqlite3，安卓自带；openssl用系统版本）
+requirements = python3,kivy==2.2.1,kivymd==1.2.0,pyjnius==1.4.0,requests==2.31.0,kivy-garden==0.1.4
 entrypoint = main.py
 
-#这些不要改 don't change these
+# 基础配置（保留不变）
 android.accept_sdk_license = True
 android.allow_api_min = 21
 android.api = 33
@@ -29,23 +25,24 @@ android.ndk_api = 21
 p4a.gradle_dependencies = gradle:7.6.4
 p4a.bootstrap = sdl2
 p4a.gradle_options = -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64
-# 修复后的权限（关键！）
+# 权限（保留修正后的）
 android.permissions = INTERNET,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION
 
-# 新增核心配置（解决闪退/APK打包问题）
+# 修复后的核心配置（解决闪退+能生成APK）
 android.add_assets = Font_0.ttf,ph_safe_table.jpg
 android.request_android_permissions = True
-android.extra_manifest_headers = android:requestLegacyExternalStorage="true"
+# 修复Manifest头格式（关键！）
+android.extra_manifest_headers = <application android:requestLegacyExternalStorage="true"/>
 android.debug = True
-android.aab = False
-p4a.build_mode = debug
-p4a.add_jars = androidx.core:core:1.10.1,com.google.android.material:material:1.11.0
-p4a.add_aars = 
-p4a.mavens = https://maven.google.com
+android.aab = False  # 强制生成APK（生效）
+# 移除冲突配置
+# p4a.build_mode = debug （删除这行）
+# 移除不兼容的jars配置（KivyMD 1.2.0不需要额外安卓X依赖）
+# p4a.add_jars = ... （删除这行）
+# p4a.add_aars = ... （删除这行）
+# p4a.mavens = ... （删除这行）
 
-#以下为release模式需要 following is required for release mode
-
-#强制构建APK而不是AAB（现在生效了）
+#release模式配置（保留注释）
 #android.keystore = /home/runner/work/RepositoryName/AndAgain/DomainName.PackageName.keystore
 #android.keystore_storepass = android
 #android.keystore_keypass = android
