@@ -24,12 +24,15 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
     - name: 🔥 清理系统残留 + 扩容磁盘
       run: |
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager
+        # 先关闭并删除旧的swapfile（关键修复）
+        sudo swapoff /swapfile || true
+        sudo rm -f /swapfile || true
+        # 重新创建swapfile
         sudo fallocate -l 10G /swapfile
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
