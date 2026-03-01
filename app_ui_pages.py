@@ -50,17 +50,21 @@ def get_db_path():
         return "sensor_data.db"
 
 def init_db_if_not_exists():
-    """
-    初始化数据库表（首次运行自动创建）
-    增加异常捕获，避免表已存在/权限问题导致APP崩溃
-    """
+    """初始化数据库表（增加延迟容错）"""
+    try:
+        # 延迟0.1秒执行，确保安卓路径就绪
+        from kivy.clock import Clock
+        Clock.schedule_once(_real_init_db, 0.1)
+    except:
+        # 同步执行（备用）
+        _real_init_db()
+
+def _real_init_db(*args):
+    """实际初始化逻辑（内部函数）"""
     try:
         db_path = get_db_path()
-        # 连接数据库（不存在则自动创建）
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
-        # 修复：SQL注释用--，避免#导致语法错误
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sensor_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,22 +75,13 @@ def init_db_if_not_exists():
                 temp_value REAL    -- 温度
             )
         ''')
-        
         conn.commit()
         conn.close()
-        # 调试：安卓端弹出提示（可选）
-        if platform == 'android':
-            toast(f"数据库初始化成功：{db_path}")
-    except sqlite3.OperationalError as e:
-        # 捕获SQL语法/权限错误
-        error_msg = f"数据库表创建失败：{str(e)}"
-        toast(error_msg)
-        print(error_msg)  # 打包后通过ADB日志查看
     except Exception as e:
-        # 捕获其他异常（如路径错误）
-        error_msg = f"数据库初始化异常：{str(e)}"
-        toast(error_msg)
-        print(error_msg)
+        print(f"数据库初始化失败：{e}")
+        if platform == 'android':
+            from kivymd.toast import toast
+            toast("数据库初始化失败，APP可继续使用")
 def insert_sensor_record_to_db(do, ph, temp):
     """插入传感器数据到数据库"""
     init_db_if_not_exists()
@@ -947,4 +942,3 @@ def create_app_ui(app_instance):
 
     add_global_log("✅ APP UI初始化完成")
     return main_container
-
